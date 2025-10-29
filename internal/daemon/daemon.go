@@ -22,16 +22,25 @@ type Config struct {
 }
 
 type Daemon struct {
-	cfg *Config
-	mu  sync.Mutex
+	cfg        *Config
+	controller hw.HDDControl
+	mu         sync.Mutex
 	// device -> last known state
 	last map[string]string
 }
 
 func New(cfg *Config) *Daemon {
+	var controller hw.HDDControl = hw.NewHDDControl()
+
+	// Honor DryRun by wrapping the controller with a dry-run wrapper.
+	if cfg != nil && cfg.DryRun {
+		controller = hw.NewDryRunHDDControl(controller)
+	}
+
 	return &Daemon{
-		cfg:  cfg,
-		last: make(map[string]string),
+		cfg:        cfg,
+		controller: controller,
+		last:       make(map[string]string),
 	}
 }
 
@@ -74,7 +83,7 @@ func (d *Daemon) poller(ctx context.Context, devs []string) {
 
 func (d *Daemon) checkAll(devs []string) {
 	for _, dev := range devs {
-		state, err := hw.GetDriveState(dev)
+		state, err := d.controller.GetState(dev)
 		if err != nil {
 			logrus.Debugf("hdparm -C %s returned parse error: %v (raw: %s)", dev, err, state)
 		}
@@ -105,7 +114,10 @@ func (d *Daemon) scheduler(ctx context.Context, devs []string) {
 	}
 	hour := 0
 	min := 0
-	fmt.Sscanf(d.cfg.ScheduleTime, "%d:%d", &hour, &min)
+	if _, err := fmt.Sscanf(d.cfg.ScheduleTime, "%d:%d", &hour, &min); err != nil {
+		logrus.Warnf("invalid schedule time %q, scheduler disabled", d.cfg.ScheduleTime)
+		return
+	}
 
 	for {
 		now := time.Now()
@@ -124,11 +136,7 @@ func (d *Daemon) scheduler(ctx context.Context, devs []string) {
 		case <-time.After(wait):
 			logrus.Infof("scheduler triggered at %s — setting standby=%d for all devices", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
 			for _, dev := range devs {
-				if d.cfg.DryRun {
-					logrus.Infof("dry-run: would run hdparm -S %d %s", d.cfg.StandbyValue, dev)
-					continue
-				}
-				if err := hw.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
+				if err := d.controller.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
 					logrus.Errorf("failed to set standby on %s: %v", dev, err)
 				} else {
 					logrus.Infof("set standby timer %d on %s", d.cfg.StandbyValue, dev)
@@ -139,11 +147,7 @@ func (d *Daemon) scheduler(ctx context.Context, devs []string) {
 }
 
 func (d *Daemon) disableSpindown(dev string) {
-	if d.cfg.DryRun {
-		logrus.Infof("dry-run: would run hdparm -S 0 %s", dev)
-		return
-	}
-	if err := hw.SetStandbyTimeout(dev, 0); err != nil {
+	if err := d.controller.SetStandbyTimeout(dev, 0); err != nil {
 		logrus.Errorf("failed to disable spindown on %s: %v", dev, err)
 	} else {
 		logrus.Infof("disabled spindown timer on %s", dev)

@@ -24,7 +24,8 @@ func NewRunCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logrus.Infof("starting hd-smart-idle (schedule=%s standby=%d poll=%s dry-run=%v)", scheduleTime, standbyValue, pollInterval, dryRun)
 
-			disks, err := hw.ListMechanicalDisks()
+			ctrl := hw.NewHDDControl()
+			disks, err := ctrl.List()
 			if err != nil {
 				logrus.Fatalf("failed to list disks: %v", err)
 				return err
