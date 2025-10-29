@@ -8,7 +8,7 @@
 实现细节
 - 语言：Go（pure Go 项目）
 - CLI：cobra
-- 日志：使用 `logrus`（默认），可选择使用 Go 标准库 `log` 风格输出
+- 日志：使用 `logrus`（默认），使用标准输出（stdout）输出日志
 - 磁盘检测：通过检查 `/sys/block/*/queue/rotational` 为 `1` 来识别机械盘
 - 与磁盘交互：使用 `hdparm -C` 查询状态，使用 `hdparm -S` 设置/取消 standby 超时（因此要求系统上安装 `hdparm`）。
 
@@ -22,7 +22,7 @@
   - 优点：支持日志级别（Info, Warn, Error, Debug），支持结构化字段，格式配置灵活（json/text），社区广泛使用，便于未来扩展（例如发送到集中式日志）。
   - 缺点：增加少量依赖，二进制体积略增。
 
-本项目默认使用 `logrus` 输出到 stdout，且保留 `--use-stdlog` 开关以切换为更简单的输出风格。
+本项目默认使用 `logrus` 输出到 stdout，日志输出为可读的带时间戳文本格式。
 
 构建和运行
 
@@ -44,7 +44,7 @@ go build -o hd-smart-idle ./...
 - `--standby`: hdparm -S 的值（例如 120），默认 `120`。
 - `--poll`: 轮询间隔，默认 `10s`。
 - `--dry-run`: 不执行 hdparm，仅记录将要运行的命令。
-- `--use-stdlog`: 切换为更简单的标准风格输出。
+（注）本项目已移除 `--use-stdlog` 可选项，统一使用 `logrus` 输出到 stdout。
 
 注意事项
 - 本程序依赖系统上安装 `hdparm`，并且需要对磁盘设备有足够的权限（通常需要 root）。
