@@ -1,6 +1,8 @@
 package hw
 
 import (
+	"errors"
+	"os"
 	"testing"
 	"testing/fstest"
 
@@ -61,6 +63,147 @@ func TestHDDController_List(t *testing.T) {
 			require.Len(t, disks, tt.wantLen)
 			if tt.wantLen > 0 && tt.wantDisk != "" {
 				require.Equal(t, tt.wantDisk, disks[0])
+			}
+		})
+	}
+}
+
+func TestParseHDParmState(t *testing.T) {
+	tests := []struct {
+		name           string
+		hdparmOutput   string
+		cmdErr         error
+		expectState    string
+		expectError    bool
+		expectErrorMsg string
+	}{
+		{
+			name: "active/idle state",
+			hdparmOutput: `/dev/sda:
+ drive state is:  active/idle
+`,
+			cmdErr:      nil,
+			expectState: DriveStateActive,
+			expectError: false,
+		},
+		{
+			name: "standby state",
+			hdparmOutput: `/dev/sdd:
+ drive state is:  standby
+`,
+			cmdErr:      nil,
+			expectState: DriveStateStandby,
+			expectError: false,
+		},
+		{
+			name: "active state (lowercase)",
+			hdparmOutput: `/dev/sdb:
+ drive state is:  active
+`,
+			cmdErr:      nil,
+			expectState: DriveStateActive,
+			expectError: false,
+		},
+		{
+			name: "idle state (lowercase)",
+			hdparmOutput: `/dev/sdc:
+ drive state is:  idle
+`,
+			cmdErr:      nil,
+			expectState: DriveStateActive,
+			expectError: false,
+		},
+		{
+			name: "standby with spaces",
+			hdparmOutput: `/dev/sde:
+ drive state is:   standby   
+`,
+			cmdErr:      nil,
+			expectState: DriveStateStandby,
+			expectError: false,
+		},
+		{
+			name:           "device not found error",
+			hdparmOutput:   `/dev/sdX: No such file or directory\n`,
+			cmdErr:         errors.New("exit status 1"),
+			expectState:    "",
+			expectError:    true,
+			expectErrorMsg: os.ErrNotExist.Error(),
+		},
+		{
+			name:           "empty output",
+			hdparmOutput:   ``,
+			cmdErr:         nil,
+			expectState:    "",
+			expectError:    true,
+			expectErrorMsg: "malformed hdparm output",
+		},
+		{
+			name: "malformed output without colon",
+			hdparmOutput: `/dev/sda:
+ drive state is active/idle
+`,
+			cmdErr:         nil,
+			expectState:    "",
+			expectError:    true,
+			expectErrorMsg: "malformed hdparm output",
+		},
+		{
+			name: "case insensitive parsing",
+			hdparmOutput: `/dev/sda:
+ Drive State Is:  active/idle
+`,
+			cmdErr:      nil,
+			expectState: DriveStateActive,
+			expectError: false,
+		},
+		{
+			name: "unknown state value",
+			hdparmOutput: `/dev/sda:
+ drive state is:  unknown_state
+`,
+			cmdErr:         nil,
+			expectState:    "",
+			expectError:    true,
+			expectErrorMsg: "malformed hdparm output",
+		},
+		{
+			name: "extra whitespace and newlines",
+			hdparmOutput: `
+/dev/sda:
+
+ drive state is:  active/idle
+
+`,
+			cmdErr:      nil,
+			expectState: DriveStateActive,
+			expectError: false,
+		},
+		{
+			name: "multiple lines with drive state",
+			hdparmOutput: `/dev/sda:
+Some other info
+ drive state is:  standby
+More info after
+`,
+			cmdErr:      nil,
+			expectState: DriveStateStandby,
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := defaultHDDControl{}
+			state, err := d.parseHDParmState(tt.hdparmOutput, tt.cmdErr)
+
+			if tt.expectError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectErrorMsg)
+				require.Equal(t, "", state)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expectState, state)
 			}
 		})
 	}

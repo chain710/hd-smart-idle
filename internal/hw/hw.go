@@ -13,6 +13,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Drive state constants
+const (
+	DriveStateActive  = "active"
+	DriveStateStandby = "standby"
+)
+
 // HDDControl defines an abstraction for HDD operations used by the daemon.
 // It allows swapping implementations for testing or platform-specific behavior.
 type HDDControl interface {
@@ -63,25 +69,44 @@ func (d defaultHDDControl) List() ([]string, error) {
 	return disks, nil
 }
 
-func (defaultHDDControl) GetState(dev string) (string, error) {
+func (d defaultHDDControl) GetState(dev string) (string, error) {
 	out, err := exec.Command(hdparmPath(), "-C", dev).CombinedOutput()
-	if err != nil {
-		// hdparm may exit non-zero; still try to parse output
-		_ = err
+	return d.parseHDParmState(string(out), err)
+}
+
+// parseHDParmState parses the output of `hdparm -C` command and returns
+// a normalized state: "active" or "standby". Returns os.ErrNotExist if device
+// not found, or other error if parsing fails.
+func (d defaultHDDControl) parseHDParmState(output string, cmdErr error) (string, error) {
+	output = strings.TrimSpace(output)
+	if cmdErr != nil {
+		if strings.Contains(output, "No such file or directory") {
+			return "", os.ErrNotExist
+		} else {
+			return "", fmt.Errorf("hdparm command error(%w): %s", cmdErr, output)
+		}
 	}
-	// parse lines for "drive state is:"
-	scanner := bufio.NewScanner(bytes.NewReader(out))
+
+	scanner := bufio.NewScanner(bytes.NewReader([]byte(output)))
 	for scanner.Scan() {
 		line := scanner.Text()
 		if idx := strings.Index(strings.ToLower(line), "drive state is:"); idx != -1 {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1]), nil
+				state := strings.TrimSpace(parts[1])
+				// Normalize to standard enum values
+				if strings.Contains(strings.ToLower(state), "standby") {
+					return DriveStateStandby, nil
+				}
+				if strings.Contains(strings.ToLower(state), "active") || strings.Contains(strings.ToLower(state), "idle") {
+					return DriveStateActive, nil
+				}
 			}
 		}
 	}
-	// fallback: return full output
-	return strings.TrimSpace(string(out)), fmt.Errorf("unexpected hdparm output")
+
+	// parse failed or "drive state is:" not found
+	return "", fmt.Errorf("malformed hdparm output: %v", output)
 }
 
 // SetStandbyTimeout implements HDDControl.SetStandbyTimeout for the default implementation.
