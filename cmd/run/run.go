@@ -10,8 +10,11 @@ import (
 )
 
 func NewRunCmd() *cobra.Command {
+	cron := &daemon.CronExpr{}
+	// Set default value: 22:00
+	_ = cron.Parse("22 00")
+
 	var (
-		scheduleTime string
 		standbyValue int
 		pollInterval time.Duration
 		dryRun       bool
@@ -21,7 +24,7 @@ func NewRunCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Run the daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logrus.Infof("starting hd-smart-idle (schedule=%s standby=%d poll=%s dry-run=%v)", scheduleTime, standbyValue, pollInterval, dryRun)
+			logrus.Infof("starting hd-smart-idle (schedule=%s standby=%d poll=%s dry-run=%v)", cron, standbyValue, pollInterval, dryRun)
 
 			ctrl := hw.NewHDDControl()
 			disks, err := ctrl.List()
@@ -38,7 +41,7 @@ func NewRunCmd() *cobra.Command {
 			d := daemon.New(&daemon.Config{
 				Devices:      disks,
 				PollInterval: pollInterval,
-				ScheduleTime: scheduleTime,
+				Cron:         cron,
 				StandbyValue: standbyValue,
 				DryRun:       dryRun,
 			})
@@ -48,7 +51,7 @@ func NewRunCmd() *cobra.Command {
 	}
 
 	// command-local flags (previously on root) - bind directly to local vars
-	cmd.Flags().StringVarP(&scheduleTime, "time", "t", "22:00", "daily time (HH:MM) to set standby timeout for all mechanical disks")
+	cmd.Flags().VarP(cron, "time", "t", "daily time (hour min) to set standby timeout for all mechanical disks")
 	cmd.Flags().IntVarP(&standbyValue, "standby", "s", 120, "hdparm -S value to set at scheduled time (e.g. 120)")
 	cmd.Flags().DurationVarP(&pollInterval, "poll", "p", 10*time.Second, "poll interval for checking disk state")
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "do not execute hdparm, only log actions")

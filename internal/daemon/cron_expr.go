@@ -57,3 +57,18 @@ func (ce *CronExpr) Next(t time.Time) time.Time {
 
 	return next
 }
+
+// String implements flag.Value interface
+func (ce *CronExpr) String() string {
+	return fmt.Sprintf("%d %d", ce.Hour, ce.Min)
+}
+
+// Set implements flag.Value interface
+func (ce *CronExpr) Set(value string) error {
+	return ce.Parse(value)
+}
+
+// Type implements pflag.Value interface (optional, for better help text)
+func (ce *CronExpr) Type() string {
+	return "hour min"
+}

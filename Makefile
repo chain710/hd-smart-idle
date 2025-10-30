@@ -17,7 +17,7 @@ build: $(BIN_DIR)
 	$(GO) build $(GOFLAGS) -o $(BINARY) github.com/example/hd-smart-idle
 
 test:
-	$(GO) test $(GOFLAGS) -v ./...
+	$(GO) test $(GOFLAGS) -v -race -count 1 ./...
 
 lint: $(GOLANGCI_LINT_BIN)
 	$(GOLANGCI_LINT_BIN) run

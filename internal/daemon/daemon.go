@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -18,7 +17,7 @@ import (
 type Config struct {
 	Devices      []string
 	PollInterval time.Duration
-	ScheduleTime string // HH:MM
+	Cron         *CronExpr
 	StandbyValue int
 	DryRun       bool
 }
@@ -26,7 +25,6 @@ type Config struct {
 type Daemon struct {
 	cfg        *Config
 	controller hw.HDDControl
-	mu         sync.Mutex
 	// device -> last known state
 	last map[string]string
 }
@@ -50,6 +48,9 @@ func New(cfg *Config) *Daemon {
 func (d *Daemon) Run() error {
 	if d.cfg == nil {
 		return fmt.Errorf("nil config")
+	}
+	if d.cfg.Cron == nil {
+		return fmt.Errorf("nil cron expression")
 	}
 
 	// canonicalize devices
@@ -82,19 +83,8 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 	pollTicker := time.NewTicker(d.cfg.PollInterval)
 	defer pollTicker.Stop()
 
-	// parse schedule time
-	cron := &CronExpr{}
-	schedulerEnabled := true
-	if err := cron.Parse(d.cfg.ScheduleTime); err != nil {
-		logrus.Warnf("invalid schedule time %q, scheduler disabled: %v", d.cfg.ScheduleTime, err)
-		schedulerEnabled = false
-	}
-
-	var nextScheduledTime time.Time
-	if schedulerEnabled {
-		nextScheduledTime = cron.Next(time.Now())
-		logrus.Infof("scheduler: next run at %s", nextScheduledTime.Format(time.RFC3339))
-	}
+	nextScheduledTime := d.cfg.Cron.Next(time.Now())
+	logrus.Infof("scheduler: next run at %s", nextScheduledTime.Format(time.RFC3339))
 
 	for {
 		select {
@@ -103,18 +93,16 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 		case <-pollTicker.C:
 			d.checkAll(devs)
 		case <-time.After(time.Until(nextScheduledTime)):
-			if schedulerEnabled {
-				logrus.Infof("scheduler triggered at %s — setting standby=%d for all devices", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
-				for _, dev := range devs {
-					if err := d.controller.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
-						logrus.Errorf("failed to set standby on %s: %v", dev, err)
-					} else {
-						logrus.Infof("set standby timer %d on %s", d.cfg.StandbyValue, dev)
-					}
+			logrus.Infof("scheduler triggered at %s — setting standby=%d for all devices", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
+			for _, dev := range devs {
+				if err := d.controller.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
+					logrus.Errorf("failed to set standby on %s: %v", dev, err)
+				} else {
+					logrus.Infof("set standby timer %d on %s", d.cfg.StandbyValue, dev)
 				}
-				nextScheduledTime = cron.Next(time.Now())
-				logrus.Infof("scheduler: next run at %s", nextScheduledTime.Format(time.RFC3339))
 			}
+			nextScheduledTime = d.cfg.Cron.Next(time.Now())
+			logrus.Infof("scheduler: next run at %s", nextScheduledTime.Format(time.RFC3339))
 		}
 	}
 }
@@ -152,13 +140,9 @@ func (d *Daemon) disableSpindown(dev string) {
 }
 
 func (d *Daemon) getLast(dev string) string {
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	return d.last[dev]
 }
 
 func (d *Daemon) setLast(dev, state string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	d.last[dev] = state
 }
