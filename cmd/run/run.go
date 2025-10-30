@@ -3,11 +3,10 @@ package run
 import (
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
-
 	"github.com/example/hd-smart-idle/internal/daemon"
 	"github.com/example/hd-smart-idle/internal/hw"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 )
 
 func NewRunCmd() *cobra.Command {

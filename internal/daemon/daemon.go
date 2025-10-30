@@ -11,9 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/example/hd-smart-idle/internal/hw"
+	"github.com/sirupsen/logrus"
 )
 
 type Config struct {
@@ -33,7 +32,7 @@ type Daemon struct {
 }
 
 func New(cfg *Config) *Daemon {
-	var controller hw.HDDControl = hw.NewHDDControl()
+	var controller = hw.NewHDDControl()
 
 	// Honor DryRun by wrapping the controller with a dry-run wrapper.
 	if cfg != nil && cfg.DryRun {

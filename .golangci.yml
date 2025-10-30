@@ -1,0 +1,84 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - asasalint
+    - gocritic
+    - reassign
+    - errorlint
+    - usestdlibvars
+    - unconvert
+    - errchkjson
+    - gocheckcompilerdirectives
+    - forbidigo
+  exclusions:
+    rules:
+      - path: 'main\.go'
+        linters:
+          - forbidigo
+  settings:
+    errcheck:
+      # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
+      # Such cases aren't reported by default.
+      # Default: false
+      check-type-assertions: false
+      # report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`.
+      # Such cases aren't reported by default.
+      # Default: false
+      check-blank: true
+      # To disable the errcheck built-in exclude list.
+      # See `-excludeonly` option in https://github.com/kisielk/errcheck#excluding-functions for details.
+      # Default: false
+      disable-default-exclusions: false
+    staticcheck:
+      checks:
+        - "all"
+        - "-ST1000"
+    gocritic:
+      disabled-checks:
+        - assignOp
+        - appendAssign
+        - singleCaseSwitch
+        - commentFormatting
+        - elseif
+        - ifElseChain
+    forbidigo:
+      # Forbid the following identifiers (list of regexp).
+      # Default: ["^(fmt\\.Print(|f|ln)|print|println)$"]
+      forbid:
+        # Builtin function:
+        - pattern: ^(fmt\\.Print(|f|ln)|print|println)$
+          msg: Do not commit print statements.
+      analyze-types: true
+formatters:
+  enable:
+    - gci
+    - gofmt
+  settings:
+    gci:
+      # Section configuration to compare against.
+      # Section names are case-insensitive and may contain parameters in ().
+      # The default order of sections is `standard > default > custom > blank > dot > alias > localmodule`.
+      # If `custom-order` is `true`, it follows the order of `sections` option.
+      # Default: ["standard", "default"]
+      sections:
+        - standard # Standard section: captures all standard packages.
+        - default # Default section: contains all imports that could not be matched to another section type.
+      # Checks that no inline comments are present.
+      # Default: false
+      no-inline-comments: true
+      # Checks that no prefix comments (comment lines above an import) are present.
+      # Default: false
+      no-prefix-comments: true
+      # Enable custom order of sections.
+      # If `true`, make the section order the same as the order of `sections`.
+      # Default: false
+      custom-order: true
+      # Drops lexical ordering for custom sections.
+      # Default: false
+      no-lex-order: true
+    gofmt:
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
