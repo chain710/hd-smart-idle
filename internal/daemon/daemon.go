@@ -3,9 +3,12 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -58,25 +61,61 @@ func (d *Daemon) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// start poller
-	go d.poller(ctx, devs)
+	// setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
-	// start scheduler
-	go d.scheduler(ctx, devs)
+	// handle signals in a goroutine and cancel context
+	go func() {
+		sig := <-sigChan
+		logrus.Infof("received signal: %v, initiating graceful shutdown", sig)
+		cancel()
+	}()
 
-	// block forever (or until killed)
-	select {}
+	// run main loop
+	d.mainLoop(ctx, devs)
+
+	return nil
 }
 
-func (d *Daemon) poller(ctx context.Context, devs []string) {
-	t := time.NewTicker(d.cfg.PollInterval)
-	defer t.Stop()
+func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
+	pollTicker := time.NewTicker(d.cfg.PollInterval)
+	defer pollTicker.Stop()
+
+	// parse schedule time
+	cron := &CronExpr{}
+	schedulerEnabled := true
+	if err := cron.Parse(d.cfg.ScheduleTime); err != nil {
+		logrus.Warnf("invalid schedule time %q, scheduler disabled: %v", d.cfg.ScheduleTime, err)
+		schedulerEnabled = false
+	}
+
+	var nextScheduledTime time.Time
+	if schedulerEnabled {
+		nextScheduledTime = cron.Next(time.Now())
+		logrus.Infof("scheduler: next run at %s", nextScheduledTime.Format(time.RFC3339))
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case <-pollTicker.C:
 			d.checkAll(devs)
+		case <-time.After(time.Until(nextScheduledTime)):
+			if schedulerEnabled {
+				logrus.Infof("scheduler triggered at %s — setting standby=%d for all devices", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
+				for _, dev := range devs {
+					if err := d.controller.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
+						logrus.Errorf("failed to set standby on %s: %v", dev, err)
+					} else {
+						logrus.Infof("set standby timer %d on %s", d.cfg.StandbyValue, dev)
+					}
+				}
+				nextScheduledTime = cron.Next(time.Now())
+				logrus.Infof("scheduler: next run at %s", nextScheduledTime.Format(time.RFC3339))
+			}
 		}
 	}
 }
@@ -102,47 +141,6 @@ func (d *Daemon) checkAll(devs []string) {
 			}
 		}
 		d.setLast(dev, state)
-	}
-}
-
-func (d *Daemon) scheduler(ctx context.Context, devs []string) {
-	// parse schedule time HH:MM
-	parts := strings.Split(d.cfg.ScheduleTime, ":")
-	if len(parts) != 2 {
-		logrus.Warnf("invalid schedule time %q, scheduler disabled", d.cfg.ScheduleTime)
-		return
-	}
-	hour := 0
-	min := 0
-	if _, err := fmt.Sscanf(d.cfg.ScheduleTime, "%d:%d", &hour, &min); err != nil {
-		logrus.Warnf("invalid schedule time %q, scheduler disabled", d.cfg.ScheduleTime)
-		return
-	}
-
-	for {
-		now := time.Now()
-		// next occurrence
-		loc := now.Location()
-		next := time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, loc)
-		if !next.After(now) {
-			next = next.Add(24 * time.Hour)
-		}
-		wait := time.Until(next)
-		logrus.Infof("scheduler: next run at %s (in %s)", next.Format(time.RFC3339), wait)
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(wait):
-			logrus.Infof("scheduler triggered at %s — setting standby=%d for all devices", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
-			for _, dev := range devs {
-				if err := d.controller.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
-					logrus.Errorf("failed to set standby on %s: %v", dev, err)
-				} else {
-					logrus.Infof("set standby timer %d on %s", d.cfg.StandbyValue, dev)
-				}
-			}
-		}
 	}
 }
 
