@@ -10,11 +10,12 @@
 - Polling uses `time.NewTicker` plus `time.After(time.Until(nextScheduledTime))`; update both when modifying scheduling logic.
 - `CronExpr.Parse` expects space-delimited hour/min strings (`"22 00"`); passing `"22:00"` disables scheduling and is how the CLI currently behaves.
 - Enable dry-runs via `Daemon.Config.DryRun` which wraps the controller with `hw.NewDryRunHDDControl` and only logs `hdparm` commands.
-## Workflows
-- Build with `go build -o hd-smart-idle ./...`; binaries expect to run under root or with hdparm permissions.
-- Run manually via `./hd-smart-idle run --time 22:00 --standby 120 --poll 10s --log-level info`; command will still detect disks even in dry-run.
-- Execute tests with `go test ./...`; favor table-driven cases with `stretchr/testify` assertions and lightweight mocks.
-- Use `fstest.MapFS` (see `internal/hw/hw_test.go`) or stub `HDDControl` methods to isolate hardware behavior.
+## Build & Test Workflow
+- Preferred commands live in `Makefile`: `make` builds `bin/hd-smart-idle`, `make test` runs `go test ./...`, `make lint` installs (via official script) and runs `golangci-lint` from `bin/`.
+## Writing Unittest
+- Use table-driven tests for functions with multiple scenarios
+- Mock external dependencies using interfaces
+- Use `github.com/stretchr/testify` for assertions and mocking
 ## External Integration
 - The daemon shells out to `/sbin/hdparm`; configure an alternate path with the `HDPARM_PATH` environment variable when testing.
 - Disk detection depends on `/sys/block/*/queue/rotational`; ensure CI or reproductions provide these files or mock via `fstest`.
