@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"sort"
-	"strings"
 	"syscall"
 	"time"
 
@@ -91,7 +90,7 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 		case <-ctx.Done():
 			return
 		case <-pollTicker.C:
-			d.checkAll(devs)
+			d.scan(devs)
 		case <-time.After(time.Until(nextScheduledTime)):
 			logrus.Infof("scheduler triggered at %s — setting standby=%d for all devices", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
 			for _, dev := range devs {
@@ -107,42 +106,30 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 	}
 }
 
-func (d *Daemon) checkAll(devs []string) {
+// scan checks the state of all devices
+// if state changed from standby to active, disable spindown timer
+func (d *Daemon) scan(devs []string) {
 	for _, dev := range devs {
 		state, err := d.controller.GetState(dev)
 		if err != nil {
-			logrus.Debugf("hdparm -C %s returned parse error: %v (raw: %s)", dev, err, state)
+			logrus.Errorf("get device state(%s) error: %v", dev, err)
 		}
-		state = strings.ToLower(strings.TrimSpace(state))
-		last := d.getLast(dev)
-		if last == "" {
-			// first time: if non-standby -> ensure spindown disabled
-			logrus.Debugf("initial state for %s: %s", dev, state)
-			if !strings.Contains(state, "standby") {
-				d.disableSpindown(dev)
-			}
-		} else {
-			if !strings.Contains(state, "standby") && strings.Contains(last, "standby") {
+
+		last, ok := d.last[dev]
+		if ok {
+			switch {
+			case last == state:
+				logrus.Debugf("device %s state unchanged (state=%s)", dev, state)
+			case last == hw.DriveStateStandby:
 				logrus.Infof("device %s left standby (state=%s) — disabling spindown timer", dev, state)
-				d.disableSpindown(dev)
+				if err := d.controller.SetStandbyTimeout(dev, 0); err != nil {
+					logrus.Errorf("failed to disable spindown on %s: %v", dev, err)
+				}
+			case last == hw.DriveStateActive:
+				logrus.Infof("device %s became standby (state=%s)", dev, state)
 			}
 		}
-		d.setLast(dev, state)
+
+		d.last[dev] = state
 	}
-}
-
-func (d *Daemon) disableSpindown(dev string) {
-	if err := d.controller.SetStandbyTimeout(dev, 0); err != nil {
-		logrus.Errorf("failed to disable spindown on %s: %v", dev, err)
-	} else {
-		logrus.Infof("disabled spindown timer on %s", dev)
-	}
-}
-
-func (d *Daemon) getLast(dev string) string {
-	return d.last[dev]
-}
-
-func (d *Daemon) setLast(dev, state string) {
-	d.last[dev] = state
 }
