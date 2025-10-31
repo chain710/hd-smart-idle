@@ -123,6 +123,7 @@ func (d defaultHDDControl) parseHDParmState(output string, cmdErr error) (string
 // SetStandbyTimeout implements HDDControl.SetStandbyTimeout for the default implementation.
 // It delegates to the package-level SetStandbyTimeout function to perform the actual hdparm call.
 func (defaultHDDControl) SetStandbyTimeout(dev string, value int) error {
+	logrus.Debugf("use hdparm to set standby timeout %d on %s", value, dev)
 	out, err := exec.Command(hdparmPath(), "-S", fmt.Sprintf("%d", value), dev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to set standby timeout on %s: %w\nOutput: %s", dev, err, string(out))
@@ -152,6 +153,6 @@ type dryRunHDDControl struct {
 func (d dryRunHDDControl) List() ([]string, error)             { return d.inner.List() }
 func (d dryRunHDDControl) GetState(dev string) (string, error) { return d.inner.GetState(dev) }
 func (d dryRunHDDControl) SetStandbyTimeout(dev string, value int) error {
-	logrus.Infof("dry-run: would run hdparm -S %d %s", value, dev)
+	logrus.Infof("dry-run: set standby timeout %d on %s", value, dev)
 	return nil
 }

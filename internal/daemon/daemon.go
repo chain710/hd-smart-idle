@@ -99,8 +99,6 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 			for _, dev := range devs {
 				if err := d.controller.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
 					logrus.Errorf("failed to set standby on %s: %v", dev, err)
-				} else {
-					logrus.Infof("set standby timer %d on %s", d.cfg.StandbyValue, dev)
 				}
 			}
 			nextScheduledTime = d.cfg.Cron.Next(time.Now())
@@ -112,6 +110,7 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 // scan checks the state of all devices
 // if state changed from standby to active, disable spindown timer
 func (d *Daemon) scan(devs []string) {
+	logrus.Debugf("scanning devices: %v", devs)
 	for _, dev := range devs {
 		state, err := d.controller.GetState(dev)
 		if err != nil {
@@ -133,6 +132,8 @@ func (d *Daemon) scan(devs []string) {
 			default:
 				panic(fmt.Sprintf("invalid last state(%s)! current state(%s)", last, state))
 			}
+		} else {
+			logrus.Debugf("first set device %s state=%s", dev, state)
 		}
 
 		d.last[dev] = state
