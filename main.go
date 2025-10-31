@@ -5,6 +5,7 @@ import (
 	"os"
 
 	runcmd "github.com/chain710/hd-smart-idle/cmd/run"
+	standbycmd "github.com/chain710/hd-smart-idle/cmd/standby"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -35,6 +36,7 @@ func main() {
 
 	rootCmd.PersistentFlags().String(flagLogLevel, "info", "log level: debug|info|warn|error")
 	rootCmd.AddCommand(runcmd.NewRunCmd())
+	rootCmd.AddCommand(standbycmd.NewStandbyCmd())
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

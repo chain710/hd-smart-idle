@@ -46,9 +46,9 @@ func NewRunCmd() *cobra.Command {
 
 	// command-local flags (previously on root) - bind directly to local vars
 	cmd.Flags().VarP(cron, "time", "t", "daily time (hour min) to set standby timeout for all mechanical disks")
-	cmd.Flags().IntVarP(&standbyValue, "standby", "s", 120, "hdparm -S value to set at scheduled time (e.g. 120)")
+	cmd.Flags().IntVarP(&standbyValue, "standby", "s", 120, "standby timeout value in 5 seconds units (e.g. 120 = 10 minutes)")
 	cmd.Flags().DurationVarP(&pollInterval, "poll", "p", 10*time.Second, "poll interval for checking disk state")
-	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "do not execute hdparm, only log actions")
+	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "do not issue standby, only log actions")
 	cmd.Flags().StringSliceVarP(&devices, "devices", "D", nil, "specific devices to monitor (e.g. /dev/sda,/dev/sdb); if not set, auto-detect all rotational disks")
 
 	return cmd
