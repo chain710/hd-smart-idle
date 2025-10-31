@@ -22,32 +22,37 @@ type Config struct {
 }
 
 type Daemon struct {
-	cfg        *Config
+	cfg        Config
 	controller hw.HDDControl
 	// device -> last known state
 	last map[string]string
 }
 
-func New(cfg *Config) *Daemon {
+func New(cfg Config) (*Daemon, error) {
 	var controller = hw.NewHDDControl()
 
 	// Honor DryRun by wrapping the controller with a dry-run wrapper.
-	if cfg != nil && cfg.DryRun {
+	if cfg.DryRun {
 		controller = hw.NewDryRunHDDControl(controller)
+	}
+
+	if len(cfg.Devices) == 0 {
+		disks, err := controller.List()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list devices: %w", err)
+		}
+		cfg.Devices = disks
 	}
 
 	return &Daemon{
 		cfg:        cfg,
 		controller: controller,
 		last:       make(map[string]string),
-	}
+	}, nil
 }
 
 // Run starts the daemon loops and blocks until error or context cancel
 func (d *Daemon) Run() error {
-	if d.cfg == nil {
-		return fmt.Errorf("nil config")
-	}
 	if d.cfg.Cron == nil {
 		return fmt.Errorf("nil cron expression")
 	}
@@ -72,9 +77,7 @@ func (d *Daemon) Run() error {
 		cancel()
 	}()
 
-	// run main loop
 	d.mainLoop(ctx, devs)
-
 	return nil
 }
 
@@ -117,16 +120,18 @@ func (d *Daemon) scan(devs []string) {
 
 		last, ok := d.last[dev]
 		if ok {
-			switch {
-			case last == state:
+			switch last {
+			case state:
 				logrus.Debugf("device %s state unchanged (state=%s)", dev, state)
-			case last == hw.DriveStateStandby:
+			case hw.DriveStateStandby:
 				logrus.Infof("device %s left standby (state=%s) — disabling spindown timer", dev, state)
 				if err := d.controller.SetStandbyTimeout(dev, 0); err != nil {
 					logrus.Errorf("failed to disable spindown on %s: %v", dev, err)
 				}
-			case last == hw.DriveStateActive:
+			case hw.DriveStateActive:
 				logrus.Infof("device %s became standby (state=%s)", dev, state)
+			default:
+				panic(fmt.Sprintf("invalid last state(%s)! current state(%s)", last, state))
 			}
 		}
 
