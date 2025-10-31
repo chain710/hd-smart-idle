@@ -3,7 +3,7 @@ package run
 import (
 	"time"
 
-	"github.com/example/hd-smart-idle/internal/daemon"
+	"github.com/chain710/hd-smart-idle/internal/daemon"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

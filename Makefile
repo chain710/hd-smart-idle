@@ -14,8 +14,11 @@ all: build
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
+generate: $(MOCKERY_BIN)
+	$(MOCKERY_BIN)
+
 build: $(BIN_DIR)
-	$(GO) build $(GOFLAGS) -o $(BINARY) github.com/example/hd-smart-idle
+	$(GO) build $(GOFLAGS) -o $(BINARY) github.com/chain710/hd-smart-idle
 
 test:
 	$(GO) test $(GOFLAGS) -v -race -count 1 ./...

@@ -7,7 +7,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/example/hd-smart-idle/internal/hw"
+	"github.com/chain710/hd-smart-idle/internal/hw"
 )
 
 func TestDaemon_mainLoop_PollDrivenScenarios(t *testing.T) {

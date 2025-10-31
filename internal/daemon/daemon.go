@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/example/hd-smart-idle/internal/hw"
+	"github.com/chain710/hd-smart-idle/internal/hw"
 	"github.com/sirupsen/logrus"
 )
 

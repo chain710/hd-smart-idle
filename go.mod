@@ -1,6 +1,6 @@
-module github.com/example/hd-smart-idle
+module github.com/chain710/hd-smart-idle
 
-go 1.25.0
+go 1.25
 
 require (
 	github.com/sirupsen/logrus v1.9.3

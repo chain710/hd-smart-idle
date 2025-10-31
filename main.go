@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	runcmd "github.com/example/hd-smart-idle/cmd/run"
+	runcmd "github.com/chain710/hd-smart-idle/cmd/run"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
