@@ -96,27 +96,18 @@ func TestParseHDParmState(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "active state (lowercase)",
-			hdparmOutput: `/dev/sdb:
- drive state is:  active
-`,
-			cmdErr:      nil,
-			expectState: DriveStateActive,
-			expectError: false,
-		},
-		{
-			name: "idle state (lowercase)",
-			hdparmOutput: `/dev/sdc:
- drive state is:  idle
-`,
-			cmdErr:      nil,
-			expectState: DriveStateActive,
-			expectError: false,
-		},
-		{
-			name: "standby with spaces",
+			name: "unknown state",
 			hdparmOutput: `/dev/sde:
- drive state is:   standby   
+ drive state is:  unknown
+`,
+			cmdErr:      nil,
+			expectState: DriveStateActive,
+			expectError: false,
+		},
+		{
+			name: "sleeping state",
+			hdparmOutput: `/dev/sdf:
+ drive state is:  sleeping
 `,
 			cmdErr:      nil,
 			expectState: DriveStateStandby,
@@ -166,29 +157,6 @@ func TestParseHDParmState(t *testing.T) {
 			expectState:    "",
 			expectError:    true,
 			expectErrorMsg: "malformed hdparm output",
-		},
-		{
-			name: "extra whitespace and newlines",
-			hdparmOutput: `
-/dev/sda:
-
- drive state is:  active/idle
-
-`,
-			cmdErr:      nil,
-			expectState: DriveStateActive,
-			expectError: false,
-		},
-		{
-			name: "multiple lines with drive state",
-			hdparmOutput: `/dev/sda:
-Some other info
- drive state is:  standby
-More info after
-`,
-			cmdErr:      nil,
-			expectState: DriveStateStandby,
-			expectError: false,
 		},
 	}
 

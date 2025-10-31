@@ -94,12 +94,23 @@ func (d defaultHDDControl) parseHDParmState(output string, cmdErr error) (string
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
 				state := strings.TrimSpace(parts[1])
-				// Normalize to standard enum values
-				if strings.Contains(strings.ToLower(state), "standby") {
-					return DriveStateStandby, nil
-				}
-				if strings.Contains(strings.ToLower(state), "active") || strings.Contains(strings.ToLower(state), "idle") {
+				stateLower := strings.ToLower(state)
+				/*
+					-C Check  the  current  IDE  power mode status, which will always be one of
+					unknown (drive does not support this command),
+					active/idle (normal operation),
+					standby (low power mode, drive has spun down),
+					or sleeping (lowest power mode, drive is completely shut down).
+				*/
+				switch stateLower {
+				case "unknown":
+					fallthrough
+				case "active/idle":
 					return DriveStateActive, nil
+				case "standby":
+					return DriveStateStandby, nil
+				case "sleeping":
+					return DriveStateStandby, nil
 				}
 			}
 		}
@@ -112,10 +123,11 @@ func (d defaultHDDControl) parseHDParmState(output string, cmdErr error) (string
 // SetStandbyTimeout implements HDDControl.SetStandbyTimeout for the default implementation.
 // It delegates to the package-level SetStandbyTimeout function to perform the actual hdparm call.
 func (defaultHDDControl) SetStandbyTimeout(dev string, value int) error {
-	cmd := exec.Command(hdparmPath(), "-S", fmt.Sprintf("%d", value), dev)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stdout
-	return cmd.Run()
+	out, err := exec.Command(hdparmPath(), "-S", fmt.Sprintf("%d", value), dev).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to set standby timeout on %s: %w\nOutput: %s", dev, err, string(out))
+	}
+	return nil
 }
 
 // hdparmPath returns the path to the hdparm binary. It checks the HDPARM_PATH
