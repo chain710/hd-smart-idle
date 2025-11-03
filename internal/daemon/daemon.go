@@ -95,14 +95,14 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 		case <-pollTicker.C:
 			d.scan(devs)
 		case <-time.After(time.Until(nextScheduledTime)):
-			logrus.Infof("scheduler triggered at %s — setting standby=%d for all devices", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
+			logrus.Infof("set standby timeout: triggered at %s, value=%d", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
 			for _, dev := range devs {
 				if err := d.controller.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
 					logrus.Errorf("failed to set standby on %s: %v", dev, err)
 				}
 			}
 			nextScheduledTime = d.cfg.Cron.Next(time.Now())
-			logrus.Infof("scheduler: next run at %s", nextScheduledTime.Format(time.RFC3339))
+			logrus.Infof("set standby timeout: next run at %s", nextScheduledTime.Format(time.RFC3339))
 		}
 	}
 }
@@ -133,7 +133,7 @@ func (d *Daemon) scan(devs []string) {
 				panic(fmt.Sprintf("invalid last state(%s)! current state(%s)", last, state))
 			}
 		} else {
-			logrus.Debugf("first set device %s state=%s", dev, state)
+			logrus.Infof("first set device %s state=%s", dev, state)
 		}
 
 		d.last[dev] = state

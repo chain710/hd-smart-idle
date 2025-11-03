@@ -1,0 +1,14 @@
+[Unit]
+Description=hd-smart-idle service
+
+Requires=network-online.target
+After=network-online.target
+Requires=local-fs.target
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/local/bin/hd-smart-idle --log-level debug run -p 60s -t "3 0" -s 120
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
