@@ -95,8 +95,10 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 		case <-pollTicker.C:
 			d.scan(devs)
 		case <-time.After(time.Until(nextScheduledTime)):
-			logrus.Infof("set standby timeout: triggered at %s, value=%d", time.Now().Format(time.RFC3339), d.cfg.StandbyValue)
-			for _, dev := range devs {
+			// should not wake up inactive devices by `SetStandbyTimeout`
+			actives := d.getActiveDevices()
+			logrus.Infof("set standby timeout: value=%d", d.cfg.StandbyValue)
+			for _, dev := range actives {
 				if err := d.controller.SetStandbyTimeout(dev, d.cfg.StandbyValue); err != nil {
 					logrus.Errorf("failed to set standby on %s: %v", dev, err)
 				}
@@ -105,6 +107,16 @@ func (d *Daemon) mainLoop(ctx context.Context, devs []string) {
 			logrus.Infof("set standby timeout: next run at %s", nextScheduledTime.Format(time.RFC3339))
 		}
 	}
+}
+
+func (d *Daemon) getActiveDevices() []string {
+	var active []string
+	for dev, state := range d.last {
+		if state == hw.DriveStateActive {
+			active = append(active, dev)
+		}
+	}
+	return active
 }
 
 // scan checks the state of all devices

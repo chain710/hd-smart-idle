@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"maps"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -133,54 +134,94 @@ func TestDaemon_mainLoop_PollDrivenScenarios(t *testing.T) {
 }
 
 func TestDaemon_mainLoop_ScheduledStandbySet(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		mockCtrl := hw.NewMockHDDControl(t)
-		devs := []string{"/dev/sda", "/dev/sdb"}
-
-		// During the waiting period, polling may occur
-		mockCtrl.On("GetState", "/dev/sda").Return(hw.DriveStateActive, nil).Maybe()
-		mockCtrl.On("GetState", "/dev/sdb").Return(hw.DriveStateActive, nil).Maybe()
-
-		// Setup a cron that will trigger soon
-		now := time.Now()
-		cron := &CronExpr{
-			Hour: now.Hour(),
-			Min:  now.Minute(),
-		}
-		// Next() will return tomorrow at the same time, but we'll advance time to trigger it
-
-		d := &Daemon{
-			cfg: Config{
-				PollInterval: 10 * time.Second,
-				Cron:         cron,
-				StandbyValue: 120,
+	cases := []struct {
+		name      string
+		devs      []string
+		poll      time.Duration
+		standby   int
+		lastState map[string]string
+		expect    []string
+		setupMock func(*hw.MockHDDControl)
+	}{
+		{
+			name:    "all_devices_active",
+			devs:    []string{"/dev/sda", "/dev/sdb"},
+			poll:    10 * time.Second,
+			standby: 120,
+			lastState: map[string]string{
+				"/dev/sda": hw.DriveStateActive,
+				"/dev/sdb": hw.DriveStateActive,
 			},
-			controller: mockCtrl,
-			last:       make(map[string]string),
-		}
+			expect: []string{"/dev/sda", "/dev/sdb"},
+			setupMock: func(m *hw.MockHDDControl) {
+				m.On("GetState", "/dev/sda").Return(hw.DriveStateActive, nil).Maybe()
+				m.On("GetState", "/dev/sdb").Return(hw.DriveStateActive, nil).Maybe()
+			},
+		},
+		{
+			name:    "inactive_devices_filtered",
+			devs:    []string{"/dev/sda", "/dev/sdb", "/dev/sdc"},
+			poll:    15 * time.Second,
+			standby: 300,
+			lastState: map[string]string{
+				"/dev/sda": hw.DriveStateActive,
+				"/dev/sdb": hw.DriveStateStandby,
+				"/dev/sdc": hw.DriveStateActive,
+			},
+			expect: []string{"/dev/sda", "/dev/sdc"},
+			setupMock: func(m *hw.MockHDDControl) {
+				m.On("GetState", "/dev/sda").Return(hw.DriveStateActive, nil).Maybe()
+				m.On("GetState", "/dev/sdb").Return(hw.DriveStateStandby, nil).Maybe()
+				m.On("GetState", "/dev/sdc").Return(hw.DriveStateActive, nil).Maybe()
+			},
+		},
+	}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+	for _, tt := range cases {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				mockCtrl := hw.NewMockHDDControl(t)
+				tc.setupMock(mockCtrl)
 
-		done := make(chan struct{})
-		go func() {
-			d.mainLoop(ctx, devs)
-			close(done)
-		}()
+				now := time.Now()
+				cron := &CronExpr{Hour: now.Hour(), Min: now.Minute()}
 
-		// Wait for timers to be set up
-		synctest.Wait()
+				d := &Daemon{
+					cfg: Config{
+						PollInterval: tc.poll,
+						Cron:         cron,
+						StandbyValue: tc.standby,
+					},
+					controller: mockCtrl,
+					last:       maps.Clone(tc.lastState),
+				}
 
-		// Expect standby timer to be set on scheduled trigger
-		mockCtrl.EXPECT().SetStandbyTimeout("/dev/sda", 120).Return(nil).Once()
-		mockCtrl.EXPECT().SetStandbyTimeout("/dev/sdb", 120).Return(nil).Once()
-		// Advance time to trigger the scheduled event (24 hours + 1 second)
-		time.Sleep(24*time.Hour + time.Second)
-		synctest.Wait()
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
 
-		cancel()
-		<-done
-	})
+				done := make(chan struct{})
+				go func() {
+					d.mainLoop(ctx, tc.devs)
+					close(done)
+				}()
+
+				// Wait for timers to be set up
+				synctest.Wait()
+
+				for _, dev := range tc.expect {
+					mockCtrl.EXPECT().SetStandbyTimeout(dev, tc.standby).Return(nil).Once()
+				}
+
+				// Advance time to trigger the scheduled event (24 hours + 1 second)
+				time.Sleep(24*time.Hour + time.Second)
+				synctest.Wait()
+
+				cancel()
+				<-done
+			})
+		})
+	}
 }
 
 func TestDaemon_mainLoop_ContextCancellation(t *testing.T) {
